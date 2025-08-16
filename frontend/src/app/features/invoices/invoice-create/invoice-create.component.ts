@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, FormArray, Validators, ReactiveFormsModule } from '@angular/forms';
 import { InvoicesApiService } from '../../../core/http/invoices.api';
+import { CatalogApiService } from '../../../core/http/catalog.api';
 import { Client, Product } from '../../../shared/models/catalog';
 import { InvoiceDetailRequest } from '../../../shared/models/invoice';
 
@@ -26,9 +27,13 @@ import { InvoiceDetailRequest } from '../../../shared/models/invoice';
                   id="invoiceNumber" 
                   formControlName="invoiceNumber"
                   [class.is-invalid]="isFieldInvalid('invoiceNumber')"
+                  (blur)="checkInvoiceNumber()"
                 >
                 <div class="invalid-feedback" *ngIf="isFieldInvalid('invoiceNumber')">
                   Número de factura es requerido
+                </div>
+                <div class="invalid-feedback" *ngIf="invoiceNumberExists">
+                  Este número de factura ya existe
                 </div>
               </div>
             </div>
@@ -155,7 +160,7 @@ import { InvoiceDetailRequest } from '../../../shared/models/invoice';
             <button type="button" class="btn btn-secondary" (click)="clearForm()">
               Nuevo
             </button>
-            <button type="submit" class="btn btn-primary" [disabled]="invoiceForm.invalid || isSubmitting">
+            <button type="submit" class="btn btn-primary" [disabled]="invoiceForm.invalid || isSubmitting || invoiceNumberExists">
               {{ isSubmitting ? 'Guardando...' : 'Guardar Factura' }}
             </button>
           </div>
@@ -178,10 +183,12 @@ export class InvoiceCreateComponent implements OnInit {
   clients: Client[] = [];
   products: Product[] = [];
   isSubmitting = false;
+  invoiceNumberExists = false;
 
   constructor(
     private fb: FormBuilder,
-    private invoicesApi: InvoicesApiService
+    private invoicesApi: InvoicesApiService,
+    private catalogApi: CatalogApiService
   ) {
     this.invoiceForm = this.fb.group({
       invoiceNumber: ['', Validators.required],
@@ -275,16 +282,30 @@ export class InvoiceCreateComponent implements OnInit {
     return !!(field && field.invalid && (field.dirty || field.touched));
   }
 
+  async checkInvoiceNumber(): Promise<void> {
+    const invoiceNumber = this.invoiceForm.get('invoiceNumber')?.value;
+    if (invoiceNumber && !this.isFieldInvalid('invoiceNumber')) {
+      try {
+        this.invoiceNumberExists = await this.invoicesApi.checkInvoiceNumberExists(invoiceNumber).toPromise();
+      } catch (error) {
+        console.error('Error al verificar número de factura:', error);
+      }
+    } else {
+      this.invoiceNumberExists = false;
+    }
+  }
+
   clearForm(): void {
     this.invoiceForm.reset({
       invoiceDate: new Date().toISOString().split('T')[0]
     });
     this.detailsArray.clear();
     this.addProduct();
+    this.invoiceNumberExists = false;
   }
 
   async onSubmit(): Promise<void> {
-    if (this.invoiceForm.invalid) {
+    if (this.invoiceForm.invalid || this.invoiceNumberExists) {
       return;
     }
 
@@ -314,25 +335,19 @@ export class InvoiceCreateComponent implements OnInit {
 
   private async loadClients(): Promise<void> {
     try {
-      // Implementar carga de clientes desde API
-      this.clients = [
-        { id: 1, name: 'Cliente 1', email: 'cliente1@test.com', phone: '123456789', address: 'Dirección 1', createdAt: new Date(), updatedAt: new Date() },
-        { id: 2, name: 'Cliente 2', email: 'cliente2@test.com', phone: '987654321', address: 'Dirección 2', createdAt: new Date(), updatedAt: new Date() }
-      ];
+      this.clients = await this.catalogApi.getClients().toPromise();
     } catch (error) {
       console.error('Error al cargar clientes:', error);
+      alert('Error al cargar la lista de clientes');
     }
   }
 
   private async loadProducts(): Promise<void> {
     try {
-      // Implementar carga de productos desde API
-      this.products = [
-        { id: 1, name: 'Producto 1', description: 'Descripción 1', price: 10000, imageUrl: '/assets/product1.jpg', isActive: true, createdAt: new Date(), updatedAt: new Date() },
-        { id: 2, name: 'Producto 2', description: 'Descripción 2', price: 20000, imageUrl: '/assets/product2.jpg', isActive: true, createdAt: new Date(), updatedAt: new Date() }
-      ];
+      this.products = await this.catalogApi.getProducts().toPromise();
     } catch (error) {
       console.error('Error al cargar productos:', error);
+      alert('Error al cargar la lista de productos');
     }
   }
 }

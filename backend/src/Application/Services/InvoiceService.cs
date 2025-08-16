@@ -51,6 +51,11 @@ public class InvoiceService : IInvoiceService
         return await _invoiceRepository.GetInvoiceByIdAsync(id);
     }
 
+    public async Task<InvoiceDto?> GetInvoiceByNumberAsync(string invoiceNumber)
+    {
+        return await _invoiceRepository.GetInvoiceByNumberAsync(invoiceNumber);
+    }
+
     public async Task<PagedResult<InvoiceListItemDto>> GetInvoicesAsync(int page, int pageSize)
     {
         var invoices = await _invoiceRepository.GetInvoicesAsync(page, pageSize);

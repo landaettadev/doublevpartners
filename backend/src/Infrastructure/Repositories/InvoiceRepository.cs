@@ -2,6 +2,7 @@ using Application.Dtos;
 using Infrastructure.Db;
 using Microsoft.Data.SqlClient;
 using System.Data;
+using Application.Interfaces;
 
 namespace Infrastructure.Repositories;
 
@@ -58,17 +59,17 @@ public class InvoiceRepository : IInvoiceRepository
             {
                 invoice = new InvoiceDto
                 {
-                    Id = reader.GetInt32("Id"),
-                    InvoiceNumber = reader.GetString("InvoiceNumber"),
-                    ClientId = reader.GetInt32("ClientId"),
-                    ClientName = reader.GetString("ClientName"),
-                    InvoiceDate = reader.GetDateTime("InvoiceDate"),
-                    Subtotal = reader.GetDecimal("Subtotal"),
-                    TaxAmount = reader.GetDecimal("TaxAmount"),
-                    Total = reader.GetDecimal("Total"),
-                    Status = reader.GetString("Status"),
-                    CreatedAt = reader.GetDateTime("CreatedAt"),
-                    UpdatedAt = reader.GetDateTime("UpdatedAt"),
+                    Id = reader.GetInt32(0),
+                    InvoiceNumber = reader.GetString(1),
+                    ClientId = reader.GetInt32(2),
+                    ClientName = reader.GetString(3),
+                    InvoiceDate = reader.GetDateTime(4),
+                    Subtotal = reader.GetDecimal(5),
+                    TaxAmount = reader.GetDecimal(6),
+                    Total = reader.GetDecimal(7),
+                    Status = reader.GetString(8),
+                    CreatedAt = reader.GetDateTime(9),
+                    UpdatedAt = reader.GetDateTime(10),
                     Details = new List<InvoiceDetailDto>()
                 };
             }
@@ -77,7 +78,7 @@ public class InvoiceRepository : IInvoiceRepository
         if (invoice != null)
         {
             // Obtener detalles
-            var detailsCommand = new SqlCommand("sp_GetInvoiceById", connection)
+            var detailsCommand = new SqlCommand("sp_GetInvoiceDetailsByInvoiceId", connection)
             {
                 CommandType = CommandType.StoredProcedure
             };
@@ -88,10 +89,10 @@ public class InvoiceRepository : IInvoiceRepository
             {
                 invoice.Details.Add(new InvoiceDetailDto
                 {
-                    ProductId = detailsReader.GetInt32("ProductId"),
-                    Quantity = detailsReader.GetInt32("Quantity"),
-                    UnitPrice = detailsReader.GetDecimal("UnitPrice"),
-                    Total = detailsReader.GetDecimal("Total")
+                    ProductId = detailsReader.GetInt32(0),
+                    Quantity = detailsReader.GetInt32(1),
+                    UnitPrice = detailsReader.GetDecimal(2),
+                    Total = detailsReader.GetDecimal(3)
                 });
             }
         }
@@ -117,16 +118,16 @@ public class InvoiceRepository : IInvoiceRepository
         {
             invoices.Add(new InvoiceListItemDto
             {
-                Id = reader.GetInt32("Id"),
-                InvoiceNumber = reader.GetString("InvoiceNumber"),
-                ClientId = reader.GetInt32("ClientId"),
-                ClientName = reader.GetString("ClientName"),
-                InvoiceDate = reader.GetDateTime("InvoiceDate"),
-                Subtotal = reader.GetDecimal("Subtotal"),
-                TaxAmount = reader.GetDecimal("TaxAmount"),
-                Total = reader.GetDecimal("Total"),
-                Status = reader.GetString("Status"),
-                CreatedAt = reader.GetDateTime("CreatedAt")
+                Id = reader.GetInt32(0),
+                InvoiceNumber = reader.GetString(1),
+                ClientId = reader.GetInt32(2),
+                ClientName = reader.GetString(3),
+                InvoiceDate = reader.GetDateTime(4),
+                Subtotal = reader.GetDecimal(5),
+                TaxAmount = reader.GetDecimal(6),
+                Total = reader.GetDecimal(7),
+                Status = reader.GetString(8),
+                CreatedAt = reader.GetDateTime(9)
             });
         }
 
@@ -151,20 +152,79 @@ public class InvoiceRepository : IInvoiceRepository
         {
             invoices.Add(new InvoiceListItemDto
             {
-                Id = reader.GetInt32("Id"),
-                InvoiceNumber = reader.GetString("InvoiceNumber"),
-                ClientId = reader.GetInt32("ClientId"),
-                ClientName = reader.GetString("ClientName"),
-                InvoiceDate = reader.GetDateTime("InvoiceDate"),
-                Subtotal = reader.GetDecimal("Subtotal"),
-                TaxAmount = reader.GetDecimal("TaxAmount"),
-                Total = reader.GetDecimal("Total"),
-                Status = reader.GetString("Status"),
-                CreatedAt = reader.GetDateTime("CreatedAt")
+                Id = reader.GetInt32(0),
+                InvoiceNumber = reader.GetString(1),
+                ClientId = reader.GetInt32(2),
+                ClientName = reader.GetString(3),
+                InvoiceDate = reader.GetDateTime(4),
+                Subtotal = reader.GetDecimal(5),
+                TaxAmount = reader.GetDecimal(6),
+                Total = reader.GetDecimal(7),
+                Status = reader.GetString(8),
+                CreatedAt = reader.GetDateTime(9)
             });
         }
 
         return invoices;
+    }
+
+    public async Task<InvoiceDto?> GetInvoiceByNumberAsync(string invoiceNumber)
+    {
+        using var connection = await _connectionFactory.CreateConnectionAsync();
+        
+        // Obtener encabezado por número de factura
+        var headerCommand = new SqlCommand("sp_GetInvoiceByNumber", connection)
+        {
+            CommandType = CommandType.StoredProcedure
+        };
+        headerCommand.Parameters.AddWithValue("@InvoiceNumber", invoiceNumber);
+
+        InvoiceDto? invoice = null;
+        using (var reader = await headerCommand.ExecuteReaderAsync())
+        {
+            if (await reader.ReadAsync())
+            {
+                invoice = new InvoiceDto
+                {
+                    Id = reader.GetInt32(0),
+                    InvoiceNumber = reader.GetString(1),
+                    ClientId = reader.GetInt32(2),
+                    ClientName = reader.GetString(3),
+                    InvoiceDate = reader.GetDateTime(4),
+                    Subtotal = reader.GetDecimal(5),
+                    TaxAmount = reader.GetDecimal(6),
+                    Total = reader.GetDecimal(7),
+                    Status = reader.GetString(8),
+                    CreatedAt = reader.GetDateTime(9),
+                    UpdatedAt = reader.GetDateTime(10),
+                    Details = new List<InvoiceDetailDto>()
+                };
+            }
+        }
+
+        if (invoice != null)
+        {
+            // Obtener detalles
+            var detailsCommand = new SqlCommand("sp_GetInvoiceDetailsByInvoiceId", connection)
+            {
+                CommandType = CommandType.StoredProcedure
+            };
+            detailsCommand.Parameters.AddWithValue("@InvoiceId", invoice.Id);
+
+            using var detailsReader = await detailsCommand.ExecuteReaderAsync();
+            while (await detailsReader.ReadAsync())
+            {
+                invoice.Details.Add(new InvoiceDetailDto
+                {
+                    ProductId = detailsReader.GetInt32(0),
+                    Quantity = detailsReader.GetInt32(1),
+                    UnitPrice = detailsReader.GetDecimal(2),
+                    Total = detailsReader.GetDecimal(3)
+                });
+            }
+        }
+
+        return invoice;
     }
 
     public async Task<bool> CheckInvoiceNumberExistsAsync(string invoiceNumber)

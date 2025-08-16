@@ -1,14 +1,15 @@
 using Application.Dtos;
 using Infrastructure.Db;
 using Microsoft.Data.SqlClient;
+using Application.Interfaces;
 
 namespace Infrastructure.Repositories;
 
-public class CatalogRepository : ICatalogRepository
+public class CatalogRepo : ICatalogRepository
 {
     private readonly IDbConnectionFactory _connectionFactory;
 
-    public CatalogRepository(IDbConnectionFactory connectionFactory)
+    public CatalogRepo(IDbConnectionFactory connectionFactory)
     {
         _connectionFactory = connectionFactory;
     }
@@ -28,13 +29,13 @@ public class CatalogRepository : ICatalogRepository
         {
             clients.Add(new ClientDto
             {
-                Id = reader.GetInt32("Id"),
-                Name = reader.GetString("Name"),
-                Email = reader.IsDBNull("Email") ? string.Empty : reader.GetString("Email"),
-                Phone = reader.IsDBNull("Phone") ? string.Empty : reader.GetString("Phone"),
-                Address = reader.IsDBNull("Address") ? string.Empty : reader.GetString("Address"),
-                CreatedAt = reader.GetDateTime("CreatedAt"),
-                UpdatedAt = reader.GetDateTime("UpdatedAt")
+                Id = reader.GetInt32(0),
+                Name = reader.GetString(1),
+                Email = reader.IsDBNull(2) ? string.Empty : reader.GetString(2),
+                Phone = reader.IsDBNull(3) ? string.Empty : reader.GetString(3),
+                Address = reader.IsDBNull(4) ? string.Empty : reader.GetString(4),
+                CreatedAt = reader.GetDateTime(5),
+                UpdatedAt = reader.GetDateTime(6)
             });
         }
 
@@ -56,13 +57,13 @@ public class CatalogRepository : ICatalogRepository
         {
             return new ClientDto
             {
-                Id = reader.GetInt32("Id"),
-                Name = reader.GetString("Name"),
-                Email = reader.IsDBNull("Email") ? string.Empty : reader.GetString("Email"),
-                Phone = reader.IsDBNull("Phone") ? string.Empty : reader.GetString("Phone"),
-                Address = reader.IsDBNull("Address") ? string.Empty : reader.GetString("Address"),
-                CreatedAt = reader.GetDateTime("CreatedAt"),
-                UpdatedAt = reader.GetDateTime("UpdatedAt")
+                Id = reader.GetInt32(0),
+                Name = reader.GetString(1),
+                Email = reader.IsDBNull(2) ? string.Empty : reader.GetString(2),
+                Phone = reader.IsDBNull(3) ? string.Empty : reader.GetString(3),
+                Address = reader.IsDBNull(4) ? string.Empty : reader.GetString(4),
+                CreatedAt = reader.GetDateTime(5),
+                UpdatedAt = reader.GetDateTime(6)
             };
         }
 
@@ -84,14 +85,14 @@ public class CatalogRepository : ICatalogRepository
         {
             products.Add(new ProductDto
             {
-                Id = reader.GetInt32("Id"),
-                Name = reader.GetString("Name"),
-                Description = reader.IsDBNull("Description") ? string.Empty : reader.GetString("Description"),
-                Price = reader.GetDecimal("Price"),
-                ImageUrl = reader.IsDBNull("ImageUrl") ? string.Empty : reader.GetString("ImageUrl"),
-                IsActive = reader.GetBoolean("IsActive"),
-                CreatedAt = reader.GetDateTime("CreatedAt"),
-                UpdatedAt = reader.GetDateTime("UpdatedAt")
+                Id = reader.GetInt32(0),
+                Name = reader.GetString(1),
+                Description = reader.IsDBNull(2) ? string.Empty : reader.GetString(2),
+                Price = reader.GetDecimal(3),
+                ImageUrl = reader.IsDBNull(4) ? string.Empty : reader.GetString(4),
+                IsActive = reader.GetBoolean(5),
+                CreatedAt = reader.GetDateTime(6),
+                UpdatedAt = reader.GetDateTime(7)
             });
         }
 
@@ -113,14 +114,14 @@ public class CatalogRepository : ICatalogRepository
         {
             return new ProductDto
             {
-                Id = reader.GetInt32("Id"),
-                Name = reader.GetString("Name"),
-                Description = reader.IsDBNull("Description") ? string.Empty : reader.GetString("Description"),
-                Price = reader.GetDecimal("Price"),
-                ImageUrl = reader.IsDBNull("ImageUrl") ? string.Empty : reader.GetString("ImageUrl"),
-                IsActive = reader.GetBoolean("IsActive"),
-                CreatedAt = reader.GetDateTime("CreatedAt"),
-                UpdatedAt = reader.GetDateTime("UpdatedAt")
+                Id = reader.GetInt32(0),
+                Name = reader.GetString(1),
+                Description = reader.IsDBNull(2) ? string.Empty : reader.GetString(2),
+                Price = reader.GetDecimal(3),
+                ImageUrl = reader.IsDBNull(4) ? string.Empty : reader.GetString(4),
+                IsActive = reader.GetBoolean(5),
+                CreatedAt = reader.GetDateTime(6),
+                UpdatedAt = reader.GetDateTime(7)
             };
         }
 

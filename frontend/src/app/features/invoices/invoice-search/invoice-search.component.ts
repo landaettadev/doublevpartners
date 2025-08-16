@@ -108,6 +108,12 @@ import { Invoice } from '../../../shared/models/invoice';
             No se encontraron facturas con los criterios especificados.
           </div>
         </div>
+
+        <div *ngIf="errorMessage" class="mt-4">
+          <div class="alert alert-danger">
+            {{ errorMessage }}
+          </div>
+        </div>
       </div>
     </div>
   `,
@@ -128,6 +134,7 @@ export class InvoiceSearchComponent implements OnInit {
   invoices: Invoice[] = [];
   isSearching = false;
   searched = false;
+  errorMessage = '';
 
   constructor(
     private fb: FormBuilder,
@@ -152,6 +159,7 @@ export class InvoiceSearchComponent implements OnInit {
       searchValueControl.setValue('');
       searchValueControl.enable();
     }
+    this.errorMessage = '';
   }
 
   getSearchFieldId(): string {
@@ -194,13 +202,14 @@ export class InvoiceSearchComponent implements OnInit {
 
     this.isSearching = true;
     this.searched = true;
+    this.errorMessage = '';
 
     try {
       const searchRequest = this.searchForm.value;
       this.invoices = await this.invoicesApi.searchInvoices(searchRequest).toPromise();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error al buscar facturas:', error);
-      alert('Error al realizar la búsqueda');
+      this.errorMessage = error.error?.error || 'Error al realizar la búsqueda';
       this.invoices = [];
     } finally {
       this.isSearching = false;
@@ -209,10 +218,13 @@ export class InvoiceSearchComponent implements OnInit {
 
   async loadInvoices(): Promise<void> {
     try {
+      this.errorMessage = '';
       const result = await this.invoicesApi.getInvoices(1, 10).toPromise();
       this.invoices = result?.items || [];
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error al cargar facturas:', error);
+      this.errorMessage = error.error?.error || 'Error al cargar las facturas';
+      this.invoices = [];
     }
   }
 

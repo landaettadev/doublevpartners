@@ -1,6 +1,6 @@
 using Application.Dtos;
 
-namespace Infrastructure.Repositories;
+namespace Application.Interfaces;
 
 public interface ICatalogRepository
 {

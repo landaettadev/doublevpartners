@@ -21,7 +21,8 @@ public class InvoicesController : ControllerBase
     {
         try
         {
-            var invoice = await _invoiceService.CreateInvoiceAsync(request);
+            var invoiceDto = MapToInvoiceCreateDto(request);
+            var invoice = await _invoiceService.CreateInvoiceAsync(invoiceDto);
             return CreatedAtAction(nameof(GetInvoice), new { id = invoice.Id }, invoice);
         }
         catch (Exception ex)
@@ -90,5 +91,46 @@ public class InvoicesController : ControllerBase
         {
             return BadRequest(new { error = ex.Message });
         }
+    }
+
+    [HttpGet("by-number/{invoiceNumber}")]
+    public async Task<ActionResult<InvoiceDto>> GetInvoiceByNumber(string invoiceNumber)
+    {
+        try
+        {
+            var invoice = await _invoiceService.GetInvoiceByNumberAsync(invoiceNumber);
+            if (invoice == null)
+                return NotFound();
+
+            return Ok(invoice);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    private static InvoiceCreateDto MapToInvoiceCreateDto(InvoiceCreateRequest request)
+    {
+        var subtotal = request.Details.Sum(d => d.Quantity * d.UnitPrice);
+        var taxAmount = subtotal * 0.19m; // 19% IVA
+        var total = subtotal + taxAmount;
+
+        return new InvoiceCreateDto
+        {
+            InvoiceNumber = request.InvoiceNumber,
+            ClientId = request.ClientId,
+            InvoiceDate = request.InvoiceDate,
+            Subtotal = subtotal,
+            TaxAmount = taxAmount,
+            Total = total,
+            Details = request.Details.Select(d => new InvoiceDetailDto
+            {
+                ProductId = d.ProductId,
+                Quantity = d.Quantity,
+                UnitPrice = d.UnitPrice,
+                Total = d.Quantity * d.UnitPrice
+            }).ToList()
+        };
     }
 }

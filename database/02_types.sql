@@ -1,12 +1,12 @@
 -- =============================================
--- Script de Tipos - Table-Valued Parameters (TVP)
+-- Script de Tipos de Tabla Personalizados
 -- Base de Datos: LabDev
 -- =============================================
 
 USE [LabDev]
 GO
 
--- Crear tipo para detalles de factura
+-- Crear tipo de tabla para detalles de factura
 CREATE TYPE [dbo].[InvoiceDetailTVP] AS TABLE
 (
     [ProductId] INT NOT NULL,
@@ -16,18 +16,10 @@ CREATE TYPE [dbo].[InvoiceDetailTVP] AS TABLE
 )
 GO
 
--- Crear tipo para búsqueda de facturas
-CREATE TYPE [dbo].[InvoiceSearchTVP] AS TABLE
+-- Crear tipo de tabla para búsquedas
+CREATE TYPE [dbo].[SearchCriteriaTVP] AS TABLE
 (
-    [SearchType] NVARCHAR(20) NOT NULL,  -- 'Client' o 'InvoiceNumber'
+    [SearchType] NVARCHAR(20) NOT NULL,
     [SearchValue] NVARCHAR(100) NOT NULL
-)
-GO
-
--- Crear tipo para filtros de catálogo
-CREATE TYPE [dbo].[CatalogFilterTVP] AS TABLE
-(
-    [FilterType] NVARCHAR(20) NOT NULL,  -- 'Active', 'Name', 'PriceRange'
-    [FilterValue] NVARCHAR(100) NOT NULL
 )
 GO

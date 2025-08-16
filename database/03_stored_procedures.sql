@@ -291,6 +291,24 @@ BEGIN
 END
 GO
 
+-- Obtener detalles de factura por ID de factura
+CREATE PROCEDURE [dbo].[sp_GetInvoiceDetailsByInvoiceId]
+    @InvoiceId INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    SELECT 
+        id.[ProductId],
+        id.[Quantity],
+        id.[UnitPrice],
+        id.[Total]
+    FROM [dbo].[InvoiceDetails] id
+    WHERE id.[InvoiceId] = @InvoiceId
+    ORDER BY id.[Id];
+END
+GO
+
 -- Verificar si número de factura existe
 CREATE PROCEDURE [dbo].[sp_CheckInvoiceNumberExists]
     @InvoiceNumber NVARCHAR(20),
