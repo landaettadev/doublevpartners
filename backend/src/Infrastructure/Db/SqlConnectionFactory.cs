@@ -20,7 +20,7 @@ public class SqlConnectionFactory : IDbConnectionFactory
         {
             try
             {
-                var connection = new SqlConnection(connStr);
+                var connection = new SqlConnection(EnsureTimeout(connStr));
                 connection.Open();
                 return connection;
             }
@@ -41,7 +41,7 @@ public class SqlConnectionFactory : IDbConnectionFactory
         {
             try
             {
-                var connection = new SqlConnection(connStr);
+                var connection = new SqlConnection(EnsureTimeout(connStr));
                 await connection.OpenAsync();
                 return connection;
             }
@@ -72,6 +72,24 @@ public class SqlConnectionFactory : IDbConnectionFactory
             }
         }
     }
+
+    private string EnsureTimeout(string connectionString)
+    {
+        try
+        {
+            var builder = new SqlConnectionStringBuilder(connectionString);
+            if (_config.ConnectionOpenTimeoutSeconds > 0)
+            {
+                builder.ConnectTimeout = _config.ConnectionOpenTimeoutSeconds;
+            }
+            return builder.ConnectionString;
+        }
+        catch
+        {
+            // Si no se puede parsear, devolver original
+            return connectionString;
+        }
+    }
 }
 
 public class DatabaseConfig
@@ -80,4 +98,5 @@ public class DatabaseConfig
     public int CommandTimeout { get; set; } = 30;
     public int MaxRetryCount { get; set; } = 3;
     public string[]? FallbackConnectionStrings { get; set; }
+    public int ConnectionOpenTimeoutSeconds { get; set; } = 3;
 }
