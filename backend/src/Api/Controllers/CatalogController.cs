@@ -18,15 +18,8 @@ public class CatalogController : ControllerBase
     [HttpGet("clients")]
     public async Task<ActionResult<IEnumerable<ClientDto>>> GetClients()
     {
-        try
-        {
-            var clients = await _catalogRepository.GetClientsAsync();
-            return Ok(clients);
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        var clients = await _catalogRepository.GetClientsAsync();
+        return Ok(clients);
     }
 
     [HttpGet("clients/{id}")]
@@ -49,15 +42,8 @@ public class CatalogController : ControllerBase
     [HttpGet("products")]
     public async Task<ActionResult<IEnumerable<ProductDto>>> GetProducts()
     {
-        try
-        {
-            var products = await _catalogRepository.GetProductsAsync();
-            return Ok(products);
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        var products = await _catalogRepository.GetProductsAsync();
+        return Ok(products);
     }
 
     [HttpGet("products/{id}")]
