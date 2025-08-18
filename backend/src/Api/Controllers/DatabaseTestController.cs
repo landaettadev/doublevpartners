@@ -82,12 +82,12 @@ public class DatabaseTestController : ControllerBase
     {
         try
         {
-            var totalInvoices = await _invoiceRepository.GetTotalInvoicesCountAsync();
+            var invoices = await _invoiceRepository.GetInvoicesAsync(1, 5);
             
             return Ok(new
             {
                 message = "Repositorio de facturas funcionando correctamente",
-                totalInvoices = totalInvoices,
+                invoicesCount = invoices.Count(),
                 timestamp = DateTime.UtcNow
             });
         }
@@ -132,8 +132,8 @@ public class DatabaseTestController : ControllerBase
         // Test invoice repository
         try
         {
-            var totalInvoices = await _invoiceRepository.GetTotalInvoicesCountAsync();
-            results.Add(new { service = "Invoice Repository", status = "Healthy", totalInvoices = totalInvoices });
+            var invoices = await _invoiceRepository.GetInvoicesAsync(1, 5);
+            results.Add(new { service = "Invoice Repository", status = "Healthy", invoicesCount = invoices.Count() });
         }
         catch (Exception ex)
         {

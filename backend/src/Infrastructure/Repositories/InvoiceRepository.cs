@@ -1,8 +1,9 @@
 using Application.Dtos;
+using Application.Interfaces;
+using Common.Errors;
 using Infrastructure.Db;
 using Microsoft.Data.SqlClient;
 using System.Data;
-using Application.Interfaces;
 
 namespace Infrastructure.Repositories;
 
@@ -15,49 +16,77 @@ public class InvoiceRepository : IInvoiceRepository
         _connectionFactory = connectionFactory;
     }
 
-    public async Task<InvoiceDto> CreateInvoiceAsync(InvoiceCreateDto invoiceDto)
+    public async Task<IEnumerable<InvoiceDto>> GetInvoicesAsync(int page = 1, int pageSize = 10)
     {
-        using var connection = await _connectionFactory.CreateConnectionAsync();
-        using var transaction = connection.BeginTransaction();
-
         try
         {
-            // Crear encabezado de factura
-            var invoiceId = await CreateInvoiceHeaderAsync(connection, transaction, invoiceDto);
-            
-            // Crear detalles de factura
-            await CreateInvoiceDetailsAsync(connection, transaction, invoiceId, invoiceDto.Details);
+            using var connection = await _connectionFactory.CreateConnectionAsync();
+            var command = new SqlCommand("sp_GetInvoices", connection)
+            {
+                CommandType = CommandType.StoredProcedure
+            };
 
-            transaction.Commit();
+            command.Parameters.AddWithValue("@PageNumber", page);
+            command.Parameters.AddWithValue("@PageSize", pageSize);
 
-            // Retornar la factura creada
-            return await GetInvoiceByIdAsync(invoiceId) ?? 
-                throw new InvalidOperationException("No se pudo recuperar la factura creada");
+            var invoices = new List<InvoiceDto>();
+            using var reader = await command.ExecuteReaderAsync();
+
+            while (await reader.ReadAsync())
+            {
+                invoices.Add(new InvoiceDto
+                {
+                    Id = reader.GetInt32(0),
+                    InvoiceNumber = reader.GetString(1),
+                    ClientId = reader.GetInt32(2),
+                    ClientName = reader.GetString(3),
+                    InvoiceDate = reader.GetDateTime(4),
+                    Subtotal = reader.GetDecimal(5),
+                    TaxAmount = reader.GetDecimal(6),
+                    Total = reader.GetDecimal(7),
+                    Status = reader.GetString(8),
+                    CreatedAt = reader.GetDateTime(9)
+                });
+            }
+
+            return invoices;
         }
-        catch
+        catch (SqlException ex)
         {
-            transaction.Rollback();
-            throw;
+            throw new DatabaseException(
+                "Error al obtener facturas desde la base de datos",
+                "GetInvoices",
+                ex.Message,
+                new { Page = page, PageSize = pageSize, SqlError = ex.Number }
+            );
+        }
+        catch (Exception ex)
+        {
+            throw new DatabaseException(
+                "Error inesperado al obtener facturas",
+                "GetInvoices",
+                ex.Message,
+                new { Page = page, PageSize = pageSize, Error = ex.Message }
+            );
         }
     }
 
     public async Task<InvoiceDto?> GetInvoiceByIdAsync(int id)
     {
-        using var connection = await _connectionFactory.CreateConnectionAsync();
-        
-        // Obtener encabezado
-        var headerCommand = new SqlCommand("sp_GetInvoiceById", connection)
+        try
         {
-            CommandType = CommandType.StoredProcedure
-        };
-        headerCommand.Parameters.AddWithValue("@InvoiceId", id);
+            using var connection = await _connectionFactory.CreateConnectionAsync();
+            var command = new SqlCommand("sp_GetInvoiceById", connection)
+            {
+                CommandType = CommandType.StoredProcedure
+            };
 
-        InvoiceDto? invoice = null;
-        using (var reader = await headerCommand.ExecuteReaderAsync())
-        {
+            command.Parameters.AddWithValue("@InvoiceId", id);
+
+            using var reader = await command.ExecuteReaderAsync();
             if (await reader.ReadAsync())
             {
-                invoice = new InvoiceDto
+                return new InvoiceDto
                 {
                     Id = reader.GetInt32(0),
                     InvoiceNumber = reader.GetString(1),
@@ -69,122 +98,48 @@ public class InvoiceRepository : IInvoiceRepository
                     Total = reader.GetDecimal(7),
                     Status = reader.GetString(8),
                     CreatedAt = reader.GetDateTime(9),
-                    UpdatedAt = reader.GetDateTime(10),
-                    Details = new List<InvoiceDetailDto>()
+                    UpdatedAt = reader.GetDateTime(10)
                 };
             }
+
+            return null;
         }
-
-        if (invoice != null)
+        catch (SqlException ex)
         {
-            // Obtener detalles
-            var detailsCommand = new SqlCommand("sp_GetInvoiceDetailsByInvoiceId", connection)
-            {
-                CommandType = CommandType.StoredProcedure
-            };
-            detailsCommand.Parameters.AddWithValue("@InvoiceId", id);
-
-            using var detailsReader = await detailsCommand.ExecuteReaderAsync();
-            while (await detailsReader.ReadAsync())
-            {
-                invoice.Details.Add(new InvoiceDetailDto
-                {
-                    ProductId = detailsReader.GetInt32(0),
-                    Quantity = detailsReader.GetInt32(1),
-                    UnitPrice = detailsReader.GetDecimal(2),
-                    Total = detailsReader.GetDecimal(3)
-                });
-            }
+            throw new DatabaseException(
+                "Error al obtener factura por ID desde la base de datos",
+                "GetInvoiceById",
+                ex.Message,
+                new { InvoiceId = id, SqlError = ex.Number }
+            );
         }
-
-        return invoice;
-    }
-
-    public async Task<IEnumerable<InvoiceListItemDto>> GetInvoicesAsync(int page, int pageSize)
-    {
-        using var connection = await _connectionFactory.CreateConnectionAsync();
-        var command = new SqlCommand("sp_GetInvoices", connection)
+        catch (Exception ex)
         {
-            CommandType = CommandType.StoredProcedure
-        };
-        
-        command.Parameters.AddWithValue("@PageSize", pageSize);
-        command.Parameters.AddWithValue("@PageNumber", page);
-
-        var invoices = new List<InvoiceListItemDto>();
-        using var reader = await command.ExecuteReaderAsync();
-        
-        while (await reader.ReadAsync())
-        {
-            invoices.Add(new InvoiceListItemDto
-            {
-                Id = reader.GetInt32(0),
-                InvoiceNumber = reader.GetString(1),
-                ClientId = reader.GetInt32(2),
-                ClientName = reader.GetString(3),
-                InvoiceDate = reader.GetDateTime(4),
-                Subtotal = reader.GetDecimal(5),
-                TaxAmount = reader.GetDecimal(6),
-                Total = reader.GetDecimal(7),
-                Status = reader.GetString(8),
-                CreatedAt = reader.GetDateTime(9)
-            });
+            throw new DatabaseException(
+                "Error inesperado al obtener factura por ID",
+                "GetInvoiceById",
+                ex.Message,
+                new { InvoiceId = id, Error = ex.Message }
+            );
         }
-
-        return invoices;
-    }
-
-    public async Task<IEnumerable<InvoiceListItemDto>> SearchInvoicesAsync(string searchType, string searchValue)
-    {
-        using var connection = await _connectionFactory.CreateConnectionAsync();
-        var command = new SqlCommand("sp_SearchInvoices", connection)
-        {
-            CommandType = CommandType.StoredProcedure
-        };
-        
-        command.Parameters.AddWithValue("@SearchType", searchType);
-        command.Parameters.AddWithValue("@SearchValue", searchValue);
-
-        var invoices = new List<InvoiceListItemDto>();
-        using var reader = await command.ExecuteReaderAsync();
-        
-        while (await reader.ReadAsync())
-        {
-            invoices.Add(new InvoiceListItemDto
-            {
-                Id = reader.GetInt32(0),
-                InvoiceNumber = reader.GetString(1),
-                ClientId = reader.GetInt32(2),
-                ClientName = reader.GetString(3),
-                InvoiceDate = reader.GetDateTime(4),
-                Subtotal = reader.GetDecimal(5),
-                TaxAmount = reader.GetDecimal(6),
-                Total = reader.GetDecimal(7),
-                Status = reader.GetString(8),
-                CreatedAt = reader.GetDateTime(9)
-            });
-        }
-
-        return invoices;
     }
 
     public async Task<InvoiceDto?> GetInvoiceByNumberAsync(string invoiceNumber)
     {
-        using var connection = await _connectionFactory.CreateConnectionAsync();
-        
-        // Obtener encabezado por número de factura
-        var headerCommand = new SqlCommand("sp_GetInvoiceByNumber", connection)
+        try
         {
-            CommandType = CommandType.StoredProcedure
-        };
-        headerCommand.Parameters.AddWithValue("@InvoiceNumber", invoiceNumber);
+            using var connection = await _connectionFactory.CreateConnectionAsync();
+            var command = new SqlCommand("sp_GetInvoiceByNumber", connection)
+            {
+                CommandType = CommandType.StoredProcedure
+            };
 
-        InvoiceDto? invoice = null;
-        using (var reader = await headerCommand.ExecuteReaderAsync())
-        {
+            command.Parameters.AddWithValue("@InvoiceNumber", invoiceNumber);
+
+            using var reader = await command.ExecuteReaderAsync();
             if (await reader.ReadAsync())
             {
-                invoice = new InvoiceDto
+                return new InvoiceDto
                 {
                     Id = reader.GetInt32(0),
                     InvoiceNumber = reader.GetString(1),
@@ -196,51 +151,262 @@ public class InvoiceRepository : IInvoiceRepository
                     Total = reader.GetDecimal(7),
                     Status = reader.GetString(8),
                     CreatedAt = reader.GetDateTime(9),
-                    UpdatedAt = reader.GetDateTime(10),
-                    Details = new List<InvoiceDetailDto>()
+                    UpdatedAt = reader.GetDateTime(10)
                 };
             }
-        }
 
-        if (invoice != null)
+            return null;
+        }
+        catch (SqlException ex)
         {
-            // Obtener detalles
-            var detailsCommand = new SqlCommand("sp_GetInvoiceDetailsByInvoiceId", connection)
+            throw new DatabaseException(
+                "Error al obtener factura por número desde la base de datos",
+                "GetInvoiceByNumber",
+                ex.Message,
+                new { InvoiceNumber = invoiceNumber, SqlError = ex.Number }
+            );
+        }
+        catch (Exception ex)
+        {
+            throw new DatabaseException(
+                "Error inesperado al obtener factura por número",
+                "GetInvoiceByNumber",
+                ex.Message,
+                new { InvoiceNumber = invoiceNumber, Error = ex.Message }
+            );
+        }
+    }
+
+    public async Task<InvoiceDto> CreateInvoiceAsync(InvoiceCreateDto invoiceDto)
+    {
+        try
+        {
+            using var connection = await _connectionFactory.CreateConnectionAsync();
+            await connection.OpenAsync();
+
+            using var transaction = connection.BeginTransaction();
+
+            try
+            {
+                // Crear la factura
+                var invoiceCommand = new SqlCommand("sp_CreateInvoice", connection, transaction)
+                {
+                    CommandType = CommandType.StoredProcedure
+                };
+
+                invoiceCommand.Parameters.AddWithValue("@InvoiceNumber", invoiceDto.InvoiceNumber);
+                invoiceCommand.Parameters.AddWithValue("@ClientId", invoiceDto.ClientId);
+                invoiceCommand.Parameters.AddWithValue("@InvoiceDate", invoiceDto.InvoiceDate);
+                invoiceCommand.Parameters.AddWithValue("@Subtotal", invoiceDto.Subtotal);
+                invoiceCommand.Parameters.AddWithValue("@TaxAmount", invoiceDto.TaxAmount);
+                invoiceCommand.Parameters.AddWithValue("@Total", invoiceDto.Total);
+
+                // Crear TVP para detalles
+                var detailsTable = new DataTable();
+                detailsTable.Columns.Add("ProductId", typeof(int));
+                detailsTable.Columns.Add("Quantity", typeof(int));
+                detailsTable.Columns.Add("UnitPrice", typeof(decimal));
+                detailsTable.Columns.Add("Total", typeof(decimal));
+
+                if (invoiceDto.Details != null)
+                {
+                    foreach (var d in invoiceDto.Details)
+                    {
+                        detailsTable.Rows.Add(d.ProductId, d.Quantity, d.UnitPrice, d.Total);
+                    }
+                }
+
+                var detailsParam = invoiceCommand.Parameters.AddWithValue("@InvoiceDetails", detailsTable);
+                detailsParam.SqlDbType = SqlDbType.Structured;
+                detailsParam.TypeName = "dbo.InvoiceDetailTVP";
+
+                var invoiceIdParam = invoiceCommand.Parameters.Add("@InvoiceId", SqlDbType.Int);
+                invoiceIdParam.Direction = ParameterDirection.Output;
+
+                await invoiceCommand.ExecuteNonQueryAsync();
+                var invoiceId = (int)invoiceIdParam.Value;
+
+                transaction.Commit();
+
+                // Retornar la factura creada
+                return await GetInvoiceByIdAsync(invoiceId) ?? 
+                    throw new DatabaseException(
+                        "Error al crear la factura",
+                        "CreateInvoice",
+                        "La factura se creó pero no se pudo recuperar",
+                        new { InvoiceId = invoiceId, InvoiceData = invoiceDto }
+                    );
+            }
+            catch
+            {
+                transaction.Rollback();
+                throw;
+            }
+        }
+        catch (SqlException ex)
+        {
+            throw new DatabaseException(
+                "Error al crear factura en la base de datos",
+                "CreateInvoice",
+                ex.Message,
+                new { InvoiceData = invoiceDto, SqlError = ex.Number }
+            );
+        }
+        catch (Exception ex)
+        {
+            throw new DatabaseException(
+                "Error inesperado al crear factura",
+                "CreateInvoice",
+                ex.Message,
+                new { InvoiceData = invoiceDto, Error = ex.Message }
+            );
+        }
+    }
+
+    public async Task<IEnumerable<InvoiceDto>> SearchInvoicesAsync(InvoiceSearchRequest searchRequest)
+    {
+        try
+        {
+            using var connection = await _connectionFactory.CreateConnectionAsync();
+            var command = new SqlCommand("sp_SearchInvoices", connection)
             {
                 CommandType = CommandType.StoredProcedure
             };
-            detailsCommand.Parameters.AddWithValue("@InvoiceId", invoice.Id);
 
-            using var detailsReader = await detailsCommand.ExecuteReaderAsync();
-            while (await detailsReader.ReadAsync())
+            command.Parameters.AddWithValue("@SearchType", searchRequest.SearchType);
+            command.Parameters.AddWithValue("@SearchValue", searchRequest.SearchValue);
+
+            var invoices = new List<InvoiceDto>();
+            using var reader = await command.ExecuteReaderAsync();
+
+            while (await reader.ReadAsync())
             {
-                invoice.Details.Add(new InvoiceDetailDto
+                invoices.Add(new InvoiceDto
                 {
-                    ProductId = detailsReader.GetInt32(0),
-                    Quantity = detailsReader.GetInt32(1),
-                    UnitPrice = detailsReader.GetDecimal(2),
-                    Total = detailsReader.GetDecimal(3)
+                    Id = reader.GetInt32(0),
+                    InvoiceNumber = reader.GetString(1),
+                    ClientId = reader.GetInt32(2),
+                    ClientName = reader.GetString(3),
+                    InvoiceDate = reader.GetDateTime(4),
+                    Subtotal = reader.GetDecimal(5),
+                    TaxAmount = reader.GetDecimal(6),
+                    Total = reader.GetDecimal(7),
+                    Status = reader.GetString(8),
+                    CreatedAt = reader.GetDateTime(9)
                 });
             }
-        }
 
-        return invoice;
+            return invoices;
+        }
+        catch (SqlException ex)
+        {
+            throw new DatabaseException(
+                "Error al buscar facturas en la base de datos",
+                "SearchInvoices",
+                ex.Message,
+                new { SearchRequest = searchRequest, SqlError = ex.Number }
+            );
+        }
+        catch (Exception ex)
+        {
+            throw new DatabaseException(
+                "Error inesperado al buscar facturas",
+                "SearchInvoices",
+                ex.Message,
+                new { SearchRequest = searchRequest, Error = ex.Message }
+            );
+        }
     }
 
     public async Task<bool> CheckInvoiceNumberExistsAsync(string invoiceNumber)
     {
-        using var connection = await _connectionFactory.CreateConnectionAsync();
-        var command = new SqlCommand("sp_CheckInvoiceNumberExists", connection)
+        try
         {
-            CommandType = CommandType.StoredProcedure
-        };
-        
-        command.Parameters.AddWithValue("@InvoiceNumber", invoiceNumber);
-        var existsParam = command.Parameters.Add("@Exists", SqlDbType.Bit);
-        existsParam.Direction = ParameterDirection.Output;
+            using var connection = await _connectionFactory.CreateConnectionAsync();
+            var command = new SqlCommand("sp_CheckInvoiceNumberExists", connection)
+            {
+                CommandType = CommandType.StoredProcedure
+            };
 
-        await command.ExecuteNonQueryAsync();
-        return (bool)existsParam.Value;
+            command.Parameters.AddWithValue("@InvoiceNumber", invoiceNumber);
+
+            var existsParam = command.Parameters.Add("@Exists", SqlDbType.Bit);
+            existsParam.Direction = ParameterDirection.Output;
+
+            await command.ExecuteNonQueryAsync();
+            return existsParam.Value != DBNull.Value && (bool)existsParam.Value;
+        }
+        catch (SqlException ex)
+        {
+            throw new DatabaseException(
+                "Error al verificar existencia del número de factura en la base de datos",
+                "CheckInvoiceNumberExists",
+                ex.Message,
+                new { InvoiceNumber = invoiceNumber, SqlError = ex.Number }
+            );
+        }
+        catch (Exception ex)
+        {
+            throw new DatabaseException(
+                "Error inesperado al verificar existencia del número de factura",
+                "CheckInvoiceNumberExists",
+                ex.Message,
+                new { InvoiceNumber = invoiceNumber, Error = ex.Message }
+            );
+        }
+    }
+
+    public async Task<InvoiceNumberValidationResult> CheckInvoiceNumberWithDetailsAsync(string invoiceNumber)
+    {
+        try
+        {
+            using var connection = await _connectionFactory.CreateConnectionAsync();
+            var command = new SqlCommand("sp_CheckInvoiceNumberExists", connection)
+            {
+                CommandType = CommandType.StoredProcedure
+            };
+
+            command.Parameters.AddWithValue("@InvoiceNumber", invoiceNumber);
+
+            var invoiceIdParam = command.Parameters.Add("@InvoiceId", SqlDbType.Int);
+            invoiceIdParam.Direction = ParameterDirection.Output;
+
+            var clientNameParam = command.Parameters.Add("@ClientName", SqlDbType.NVarChar, 100);
+            clientNameParam.Direction = ParameterDirection.Output;
+
+            var invoiceDateParam = command.Parameters.Add("@InvoiceDate", SqlDbType.DateTime);
+            invoiceDateParam.Direction = ParameterDirection.Output;
+
+            await command.ExecuteNonQueryAsync();
+
+            var result = new InvoiceNumberValidationResult
+            {
+                Exists = invoiceIdParam.Value != DBNull.Value,
+                InvoiceId = invoiceIdParam.Value != DBNull.Value ? (int)invoiceIdParam.Value : 0,
+                ClientName = clientNameParam.Value?.ToString() ?? string.Empty,
+                InvoiceDate = invoiceDateParam.Value != DBNull.Value ? (DateTime)invoiceDateParam.Value : DateTime.MinValue
+            };
+
+            return result;
+        }
+        catch (SqlException ex)
+        {
+            throw new DatabaseException(
+                "Error al verificar existencia del número de factura con detalles en la base de datos",
+                "CheckInvoiceNumberWithDetails",
+                ex.Message,
+                new { InvoiceNumber = invoiceNumber, SqlError = ex.Number }
+            );
+        }
+        catch (Exception ex)
+        {
+            throw new DatabaseException(
+                "Error inesperado al verificar existencia del número de factura con detalles",
+                "CheckInvoiceNumberWithDetails",
+                ex.Message,
+                new { InvoiceNumber = invoiceNumber, Error = ex.Message }
+            );
+        }
     }
 
     public async Task<int> GetTotalInvoicesCountAsync()
@@ -249,49 +415,5 @@ public class InvoiceRepository : IInvoiceRepository
         var command = new SqlCommand("SELECT COUNT(*) FROM Invoices", connection);
         var result = await command.ExecuteScalarAsync();
         return Convert.ToInt32(result);
-    }
-
-    private async Task<int> CreateInvoiceHeaderAsync(SqlConnection connection, SqlTransaction transaction, InvoiceCreateDto invoiceDto)
-    {
-        var command = new SqlCommand("sp_CreateInvoice", connection, transaction)
-        {
-            CommandType = CommandType.StoredProcedure
-        };
-
-        command.Parameters.AddWithValue("@InvoiceNumber", invoiceDto.InvoiceNumber);
-        command.Parameters.AddWithValue("@ClientId", invoiceDto.ClientId);
-        command.Parameters.AddWithValue("@InvoiceDate", invoiceDto.InvoiceDate);
-        command.Parameters.AddWithValue("@Subtotal", invoiceDto.Subtotal);
-        command.Parameters.AddWithValue("@TaxAmount", invoiceDto.TaxAmount);
-        command.Parameters.AddWithValue("@Total", invoiceDto.Total);
-
-        // Crear tabla temporal para los detalles
-        var detailsTable = new DataTable();
-        detailsTable.Columns.Add("ProductId", typeof(int));
-        detailsTable.Columns.Add("Quantity", typeof(int));
-        detailsTable.Columns.Add("UnitPrice", typeof(decimal));
-        detailsTable.Columns.Add("Total", typeof(decimal));
-
-        foreach (var detail in invoiceDto.Details)
-        {
-            detailsTable.Rows.Add(detail.ProductId, detail.Quantity, detail.UnitPrice, detail.Total);
-        }
-
-        var detailsParam = command.Parameters.Add("@InvoiceDetails", SqlDbType.Structured);
-        detailsParam.Value = detailsTable;
-        detailsParam.TypeName = "InvoiceDetailTVP";
-
-        var invoiceIdParam = command.Parameters.Add("@InvoiceId", SqlDbType.Int);
-        invoiceIdParam.Direction = ParameterDirection.Output;
-
-        await command.ExecuteNonQueryAsync();
-        return (int)invoiceIdParam.Value;
-    }
-
-    private async Task CreateInvoiceDetailsAsync(SqlConnection connection, SqlTransaction transaction, int invoiceId, List<InvoiceDetailDto> details)
-    {
-        // Los detalles se insertan automáticamente en el stored procedure
-        // Esta función se mantiene por consistencia pero no es necesaria
-        await Task.CompletedTask;
     }
 }

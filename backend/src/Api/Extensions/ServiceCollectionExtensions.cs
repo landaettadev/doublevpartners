@@ -1,4 +1,9 @@
+using Application.Interfaces;
+using Application.Services;
+using Api.Interfaces;
+using Api.Services;
 using Infrastructure.Db;
+using Infrastructure.Repositories;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -6,12 +11,20 @@ namespace Api.Extensions;
 
 public static class ServiceCollectionExtensions
 {
-    public static IServiceCollection AddDatabaseServices(
-        this IServiceCollection services, 
-        IConfiguration configuration)
+    public static IServiceCollection AddApplicationServices(this IServiceCollection services, IConfiguration configuration)
     {
-        services.Configure<DatabaseConfig>(
-            configuration.GetSection("Database"));
+        // Database
+        services.AddScoped<IDbConnectionFactory, SqlConnectionFactory>();
+        services.Configure<DatabaseConfig>(configuration.GetSection("Database"));
+
+        // Repositories
+        services.AddScoped<IInvoiceRepository, InvoiceRepository>();
+        services.AddScoped<ICatalogRepository, CatalogRepo>();
+
+        // Services
+        services.AddScoped<IInvoiceService, InvoiceService>();
+        services.AddScoped<IProductService, ProductService>();
+        services.AddScoped<IImageService, ImageService>();
 
         return services;
     }

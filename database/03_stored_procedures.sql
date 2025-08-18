@@ -309,17 +309,164 @@ BEGIN
 END
 GO
 
--- Verificar si número de factura existe
-CREATE PROCEDURE [dbo].[sp_CheckInvoiceNumberExists]
+-- Verificar si número de factura existe con información adicional
+CREATE OR ALTER PROCEDURE [dbo].[sp_CheckInvoiceNumberExists]
     @InvoiceNumber NVARCHAR(20),
-    @Exists BIT OUTPUT
+    @Exists BIT OUTPUT,
+    @InvoiceId INT = NULL OUTPUT,
+    @ClientName NVARCHAR(100) = NULL OUTPUT,
+    @InvoiceDate DATETIME2 = NULL OUTPUT
 AS
 BEGIN
     SET NOCOUNT ON;
     
-    IF EXISTS (SELECT 1 FROM [dbo].[Invoices] WHERE [InvoiceNumber] = @InvoiceNumber)
+    DECLARE @InvoiceExists TABLE (
+        Id INT,
+        ClientName NVARCHAR(100),
+        InvoiceDate DATETIME2
+    );
+    
+    INSERT INTO @InvoiceExists (Id, ClientName, InvoiceDate)
+    SELECT 
+        i.[Id],
+        c.[Name],
+        i.[InvoiceDate]
+    FROM [dbo].[Invoices] i
+    INNER JOIN [dbo].[Clients] c ON i.[ClientId] = c.[Id]
+    WHERE i.[InvoiceNumber] = @InvoiceNumber;
+    
+    IF EXISTS (SELECT 1 FROM @InvoiceExists)
+    BEGIN
         SET @Exists = 1;
+        SELECT 
+            @InvoiceId = Id,
+            @ClientName = ClientName,
+            @InvoiceDate = InvoiceDate
+        FROM @InvoiceExists;
+    END
     ELSE
+    BEGIN
         SET @Exists = 0;
+        SET @InvoiceId = NULL;
+        SET @ClientName = NULL;
+        SET @InvoiceDate = NULL;
+    END
+END
+GO
+
+-- =============================================
+-- Stored Procedures para Productos
+-- =============================================
+
+-- Crear producto
+CREATE OR ALTER PROCEDURE [dbo].[sp_CreateProduct]
+    @Name NVARCHAR(100),
+    @Description NVARCHAR(500),
+    @Price DECIMAL(18,2),
+    @ImageUrl NVARCHAR(255),
+    @IsActive BIT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    INSERT INTO [dbo].[Products] ([Name], [Description], [Price], [ImageUrl], [IsActive], [CreatedAt], [UpdatedAt])
+    VALUES (@Name, @Description, @Price, @ImageUrl, @IsActive, GETDATE(), GETDATE());
+    
+    SET @ProductId = SCOPE_IDENTITY();
+END
+GO
+
+-- Actualizar producto
+CREATE OR ALTER PROCEDURE [dbo].[sp_UpdateProduct]
+    @ProductId INT,
+    @Name NVARCHAR(100) = NULL,
+    @Description NVARCHAR(500) = NULL,
+    @Price DECIMAL(18,2) = NULL,
+    @ImageUrl NVARCHAR(255) = NULL,
+    @IsActive BIT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    UPDATE [dbo].[Products]
+    SET 
+        [Name] = ISNULL(@Name, [Name]),
+        [Description] = ISNULL(@Description, [Description]),
+        [Price] = ISNULL(@Price, [Price]),
+        [ImageUrl] = ISNULL(@ImageUrl, [ImageUrl]),
+        [IsActive] = ISNULL(@IsActive, [IsActive]),
+        [UpdatedAt] = GETDATE()
+    WHERE [Id] = @ProductId;
+END
+GO
+
+-- Eliminar producto (soft delete)
+CREATE OR ALTER PROCEDURE [dbo].[sp_DeleteProduct]
+    @ProductId INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    UPDATE [dbo].[Products]
+    SET [IsActive] = 0, [UpdatedAt] = GETDATE()
+    WHERE [Id] = @ProductId;
+END
+GO
+
+-- Cambiar estado del producto
+CREATE OR ALTER PROCEDURE [dbo].[sp_ToggleProductStatus]
+    @ProductId INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    UPDATE [dbo].[Products]
+    SET [IsActive] = ~[IsActive], [UpdatedAt] = GETDATE()
+    WHERE [Id] = @ProductId;
+END
+GO
+
+-- Obtener productos activos
+CREATE OR ALTER PROCEDURE [dbo].[sp_GetActiveProducts]
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    SELECT 
+        [Id],
+        [Name],
+        [Description],
+        [Price],
+        [ImageUrl],
+        [IsActive],
+        [CreatedAt],
+        [UpdatedAt]
+    FROM [dbo].[Products]
+    WHERE [IsActive] = 1
+    ORDER BY [Name];
+END
+GO
+
+-- Buscar productos
+CREATE OR ALTER PROCEDURE [dbo].[sp_SearchProducts]
+    @SearchTerm NVARCHAR(100)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    SELECT 
+        [Id],
+        [Name],
+        [Description],
+        [Price],
+        [ImageUrl],
+        [IsActive],
+        [CreatedAt],
+        [UpdatedAt]
+    FROM [dbo].[Products]
+    WHERE [IsActive] = 1
+        AND ([Name] LIKE '%' + @SearchTerm + '%' 
+             OR [Description] LIKE '%' + @SearchTerm + '%')
+    ORDER BY [Name];
 END
 GO
