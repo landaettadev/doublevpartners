@@ -53,12 +53,43 @@ public class InvoicesController : ControllerBase
                 timestamp = DateTime.UtcNow
             });
         }
-        catch (ValidationException ex)
+        catch (Common.Errors.ValidationException vex)
         {
             return BadRequest(new 
             { 
                 error = "Error de validación",
-                message = ex.Message,
+                message = vex.Message,
+                details = vex.ValidationErrors,
+                timestamp = DateTime.UtcNow
+            });
+        }
+        catch (Common.Errors.ConflictException cex)
+        {
+            return StatusCode(409, new
+            {
+                error = "Conflicto",
+                message = cex.Message,
+                code = cex.ErrorCode,
+                timestamp = DateTime.UtcNow
+            });
+        }
+        catch (Common.Errors.DatabaseException dex)
+        {
+            return BadRequest(new
+            {
+                error = "Error de base de datos",
+                message = dex.Message,
+                operation = dex.Operation,
+                details = dex.AdditionalData,
+                timestamp = DateTime.UtcNow
+            });
+        }
+        catch (System.ComponentModel.DataAnnotations.ValidationException vax)
+        {
+            return BadRequest(new 
+            { 
+                error = "Error de validación del modelo",
+                message = vax.Message,
                 timestamp = DateTime.UtcNow
             });
         }

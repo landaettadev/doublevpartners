@@ -110,8 +110,9 @@ export class ExportService {
         XLSX.utils.book_append_sheet(workbook, summaryWorksheet, 'Resumen');
       }
       
-      // Guardar archivo
-      XLSX.writeFile(workbook, filename);
+      // Asegurar extensión y tipo de libro correctos
+      const ensuredFilename = filename.endsWith('.xlsx') ? filename : `${filename}.xlsx`;
+      XLSX.writeFile(workbook, ensuredFilename, { bookType: 'xlsx' as any });
       
     } catch (error) {
       console.error('Error al exportar a Excel:', error);
@@ -419,10 +420,22 @@ export class ExportService {
     const date = new Date();
     const timestamp = date.toISOString().slice(0, 10).replace(/-/g, '');
     const time = date.toTimeString().slice(0, 8).replace(/:/g, '');
-    
-    return `${baseName}_${timestamp}_${time}.${format}`;
+    const ext = this.mapFormatToExtension(format);
+    return `${baseName}_${timestamp}_${time}.${ext}`;
   }
 
+  private mapFormatToExtension(format: string): string {
+    switch (format) {
+      case 'excel':
+        return 'xlsx';
+      case 'pdf':
+        return 'pdf';
+      case 'csv':
+        return 'csv';
+      default:
+        return (format || 'txt').replace(/^\./, '');
+    }
+  }
 
 
   /**

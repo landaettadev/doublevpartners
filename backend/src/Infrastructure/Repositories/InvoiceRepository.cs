@@ -84,9 +84,11 @@ public class InvoiceRepository : IInvoiceRepository
             command.Parameters.AddWithValue("@InvoiceId", id);
 
             using var reader = await command.ExecuteReaderAsync();
+            InvoiceDto? invoice = null;
+
             if (await reader.ReadAsync())
             {
-                return new InvoiceDto
+                invoice = new InvoiceDto
                 {
                     Id = reader.GetInt32(0),
                     InvoiceNumber = reader.GetString(1),
@@ -98,11 +100,32 @@ public class InvoiceRepository : IInvoiceRepository
                     Total = reader.GetDecimal(7),
                     Status = reader.GetString(8),
                     CreatedAt = reader.GetDateTime(9),
-                    UpdatedAt = reader.GetDateTime(10)
+                    UpdatedAt = reader.GetDateTime(10),
+                    Details = new List<InvoiceDetailDto>()
                 };
             }
 
-            return null;
+            // Intentar leer segundo result set con los detalles (si existe)
+            if (invoice != null && await reader.NextResultAsync())
+            {
+                var details = new List<InvoiceDetailDto>();
+                while (await reader.ReadAsync())
+                {
+                    details.Add(new InvoiceDetailDto
+                    {
+                        // sp_GetInvoiceById retorna: Id, ProductId, ProductName, ImageUrl, Quantity, UnitPrice, Total
+                        ProductId = reader.GetInt32(1),
+                        ProductName = reader.GetString(2),
+                        ImageUrl = reader.IsDBNull(3) ? string.Empty : reader.GetString(3),
+                        Quantity = reader.GetInt32(4),
+                        UnitPrice = reader.GetDecimal(5),
+                        Total = reader.GetDecimal(6)
+                    });
+                }
+                invoice.Details = details;
+            }
+
+            return invoice;
         }
         catch (SqlException ex)
         {
@@ -137,9 +160,11 @@ public class InvoiceRepository : IInvoiceRepository
             command.Parameters.AddWithValue("@InvoiceNumber", invoiceNumber);
 
             using var reader = await command.ExecuteReaderAsync();
+            InvoiceDto? invoice = null;
+
             if (await reader.ReadAsync())
             {
-                return new InvoiceDto
+                invoice = new InvoiceDto
                 {
                     Id = reader.GetInt32(0),
                     InvoiceNumber = reader.GetString(1),
@@ -151,11 +176,30 @@ public class InvoiceRepository : IInvoiceRepository
                     Total = reader.GetDecimal(7),
                     Status = reader.GetString(8),
                     CreatedAt = reader.GetDateTime(9),
-                    UpdatedAt = reader.GetDateTime(10)
+                    UpdatedAt = reader.GetDateTime(10),
+                    Details = new List<InvoiceDetailDto>()
                 };
             }
 
-            return null;
+            if (invoice != null && await reader.NextResultAsync())
+            {
+                var details = new List<InvoiceDetailDto>();
+                while (await reader.ReadAsync())
+                {
+                    details.Add(new InvoiceDetailDto
+                    {
+                        ProductId = reader.GetInt32(1),
+                        ProductName = reader.GetString(2),
+                        ImageUrl = reader.IsDBNull(3) ? string.Empty : reader.GetString(3),
+                        Quantity = reader.GetInt32(4),
+                        UnitPrice = reader.GetDecimal(5),
+                        Total = reader.GetDecimal(6)
+                    });
+                }
+                invoice.Details = details;
+            }
+
+            return invoice;
         }
         catch (SqlException ex)
         {
@@ -182,14 +226,13 @@ public class InvoiceRepository : IInvoiceRepository
         try
         {
             using var connection = await _connectionFactory.CreateConnectionAsync();
-            await connection.OpenAsync();
 
             using var transaction = connection.BeginTransaction();
 
             try
             {
                 // Crear la factura
-                var invoiceCommand = new SqlCommand("sp_CreateInvoice", connection, transaction)
+                using var invoiceCommand = new SqlCommand("sp_CreateInvoice", connection, transaction)
                 {
                     CommandType = CommandType.StoredProcedure
                 };

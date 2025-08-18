@@ -195,12 +195,21 @@ import { ExportButtonComponent } from '../../../shared/components/export-button'
                     formControlName="unitPrice"
                     [class.is-invalid]="isDetailFieldInvalid(i, 'unitPrice')"
                     [class.is-valid]="isDetailFieldValid(i, 'unitPrice')"
-                    readonly
+                    (input)="calculateTotal(i)"
                     step="0.01"
+                    min="0.01"
                   >
                   <div class="invalid-feedback" *ngIf="isDetailFieldInvalid(i, 'unitPrice')">
-                    Precio unitario es requerido
+                    <div *ngIf="detail.get('unitPrice')?.errors?.['required']">
+                      Precio unitario es requerido
+                    </div>
+                    <div *ngIf="detail.get('unitPrice')?.errors?.['min']">
+                      El precio debe ser mayor a 0
+                    </div>
                   </div>
+                  <small class="form-text text-muted">
+                    El precio se establece automáticamente al seleccionar un producto, pero puede editarlo manualmente
+                  </small>
                 </div>
                 <div class="col-md-2">
                   <label class="form-label">Total</label>
@@ -228,9 +237,16 @@ import { ExportButtonComponent } from '../../../shared/components/export-button'
                 </div>
                 <div class="col-md-1">
                   <label class="form-label">&nbsp;</label>
-                  <button type="button" class="btn btn-danger btn-sm" (click)="removeProduct(i)" 
-                          [disabled]="detailsArray.length <= 1">
+                  <button 
+                    type="button" 
+                    class="btn btn-outline-danger btn-sm d-flex align-items-center gap-1 px-2" 
+                    (click)="removeProduct(i)" 
+                    [disabled]="detailsArray.length <= 1"
+                    title="Eliminar este producto"
+                    aria-label="Eliminar producto"
+                  >
                     <i class="bi bi-trash"></i>
+                    <span class="d-none d-md-inline">Eliminar</span>
                   </button>
                 </div>
               </div>
@@ -241,19 +257,19 @@ import { ExportButtonComponent } from '../../../shared/components/export-button'
             <div class="col-md-6 offset-md-6">
               <div class="card bg-light">
                 <div class="card-body">
-                  <h6 class="card-title">Resumen de la Factura</h6>
-                  <table class="table table-borderless mb-0">
+                  <h6 class="card-title mb-3">Resumen de la Factura</h6>
+                  <table class="table table-sm table-borderless summary-table mb-0">
                     <tr>
-                      <td><strong>Subtotal:</strong></td>
-                      <td class="text-end">{{ subtotal | currency:'COP':'symbol':'1.0-0' }}</td>
+                      <td class="label">Subtotal</td>
+                      <td class="value">{{ subtotal | currency:'COP':'symbol':'1.0-0' }}</td>
                     </tr>
                     <tr>
-                      <td><strong>IVA (19%):</strong></td>
-                      <td class="text-end">{{ taxAmount | currency:'COP':'symbol':'1.0-0' }}</td>
+                      <td class="label">IVA (19%)</td>
+                      <td class="value">{{ taxAmount | currency:'COP':'symbol':'1.0-0' }}</td>
                     </tr>
-                    <tr class="table-active">
-                      <td><strong>Total:</strong></td>
-                      <td class="text-end"><strong>{{ total | currency:'COP':'symbol':'1.0-0' }}</strong></td>
+                    <tr class="total-row">
+                      <td class="label">Total</td>
+                      <td class="value total-value">{{ total | currency:'COP':'symbol':'1.0-0' }}</td>
                     </tr>
                   </table>
                 </div>
@@ -317,6 +333,28 @@ import { ExportButtonComponent } from '../../../shared/components/export-button'
     .table-active {
       background-color: #e9ecef !important;
     }
+    .summary-table {
+      width: 100%;
+    }
+    .summary-table .label {
+      font-weight: 600;
+      color: #212529;
+      padding: .25rem 0;
+    }
+    .summary-table .value {
+      text-align: right;
+      color: #212529;
+      padding: .25rem 0;
+      white-space: nowrap;
+    }
+    .summary-table .total-row {
+      background: #f1f3f5;
+      border-radius: .25rem;
+    }
+    .summary-table .total-value {
+      font-weight: 700;
+      font-size: 1.05rem;
+    }
   `]
 })
 export class InvoiceCreateComponent implements OnInit, OnDestroy {
@@ -342,7 +380,7 @@ export class InvoiceCreateComponent implements OnInit, OnDestroy {
         Validators.minLength(8)
       ]],
       clientId: ['', Validators.required],
-      invoiceDate: [new Date().toISOString().split('T')[0], [
+      invoiceDate: [this.getTodayLocalDateString(), [
         Validators.required,
         this.futureDateValidator(),
         this.oldDateValidator()
@@ -374,7 +412,7 @@ export class InvoiceCreateComponent implements OnInit, OnDestroy {
   }
 
   get maxDate(): string {
-    return new Date().toISOString().split('T')[0];
+    return this.getTodayLocalDateString();
   }
 
   get detailsArray(): FormArray {
@@ -427,7 +465,10 @@ export class InvoiceCreateComponent implements OnInit, OnDestroy {
     const productId = detail.get('productId')?.value;
     
     if (productId) {
-      const product = this.products.find(p => p.id === productId);
+      // Convertir productId a número para comparación correcta
+      const numericProductId = Number(productId);
+      
+      const product = this.products.find(p => p.id === numericProductId);
       if (product) {
         detail.patchValue({
           unitPrice: product.price
@@ -441,7 +482,8 @@ export class InvoiceCreateComponent implements OnInit, OnDestroy {
     const detail = this.detailsArray.at(index);
     const quantity = detail.get('quantity')?.value || 0;
     const unitPrice = detail.get('unitPrice')?.value || 0;
-    // El total se calcula automáticamente en el getter
+    // El total se calcula automáticamente en el getter getDetailTotal()
+    // Esta función se ejecuta cuando cambia la cantidad o el precio unitario
   }
 
   getDetailTotal(index: number): number {
@@ -511,7 +553,7 @@ export class InvoiceCreateComponent implements OnInit, OnDestroy {
 
   clearForm(): void {
     this.invoiceForm.reset({
-      invoiceDate: new Date().toISOString().split('T')[0]
+      invoiceDate: this.getTodayLocalDateString()
     });
     this.detailsArray.clear();
     this.addProduct();
@@ -527,15 +569,54 @@ export class InvoiceCreateComponent implements OnInit, OnDestroy {
 
     try {
       const formValue = this.invoiceForm.value;
+      
+      // Convertir valores a tipos correctos para el backend y forzar precios del catálogo
+      const normalizedDetails = formValue.details.map((detail: any) => {
+        const productId = Number(detail.productId);
+        const quantity = Number(detail.quantity);
+        const product = this.products.find(p => p.id === productId);
+        const unitPrice = product ? Number(product.price) : Number(detail.unitPrice);
+        const total = quantity * unitPrice;
+        return { productId, quantity, unitPrice, total };
+      });
+
+      const subtotal = normalizedDetails.reduce((acc: number, d: any) => acc + d.total, 0);
+      const taxAmount = subtotal * 0.19;
+      const total = subtotal + taxAmount;
+
       const request = {
         ...formValue,
-        details: formValue.details.map((detail: any) => ({
-          productId: detail.productId,
-          quantity: detail.quantity,
-          unitPrice: detail.unitPrice
-        }))
-      };
+        clientId: Number(formValue.clientId),
+        details: normalizedDetails,
+        subtotal,
+        taxAmount,
+        total
+      } as any;
 
+      // Logs de debugging para diagnosticar el problema
+      console.log('FormValue original:', formValue);
+      console.log('Request convertido:', request);
+      console.log('Tipos de datos:', {
+        clientId: typeof request.clientId,
+        invoiceDate: typeof request.invoiceDate,
+        details: request.details.map((d: any) => ({
+          productId: typeof d.productId,
+          quantity: typeof d.quantity,
+          unitPrice: typeof d.unitPrice,
+          total: typeof d.total
+        })),
+        subtotal: typeof request.subtotal,
+        taxAmount: typeof request.taxAmount,
+        total: typeof request.total
+      });
+
+      // Log detallado de los detalles
+      console.log('Detalles completos:', request.details);
+      console.log('Cliente seleccionado:', this.clients.find(c => c.id === request.clientId));
+      console.log('Productos seleccionados:', request.details.map((d: any) => 
+        this.products.find(p => p.id === d.productId)
+      ));
+      
       await firstValueFrom(this.invoicesApi.createInvoice(request));
       alert('Factura creada exitosamente');
       this.clearForm();
@@ -604,13 +685,13 @@ export class InvoiceCreateComponent implements OnInit, OnDestroy {
 
   getPreviewExportData(): ExportData {
     const formValue = this.invoiceForm.value;
-    const selectedClient = this.clients.find(c => c.id === formValue.clientId);
+    const selectedClient = this.clients.find(c => c.id === Number(formValue.clientId));
     
     // Crear factura de vista previa para exportación
     const previewInvoice: Invoice = {
       id: 0,
       invoiceNumber: formValue.invoiceNumber || 'VISTA_PREVIA',
-      clientId: formValue.clientId,
+      clientId: Number(formValue.clientId),
       clientName: selectedClient?.name || 'Cliente no seleccionado',
       invoiceDate: new Date(formValue.invoiceDate),
       subtotal: this.subtotal,
@@ -620,10 +701,10 @@ export class InvoiceCreateComponent implements OnInit, OnDestroy {
       createdAt: new Date(),
       updatedAt: new Date(),
       details: formValue.details.map((detail: any) => {
-        const product = this.products.find(p => p.id === detail.productId);
+        const product = this.products.find(p => p.id === Number(detail.productId));
         return {
           id: 0,
-          productId: detail.productId,
+          productId: Number(detail.productId),
           productName: product?.name || 'Producto no encontrado',
           imageUrl: product?.imageUrl || '',
           quantity: detail.quantity,
@@ -651,5 +732,12 @@ export class InvoiceCreateComponent implements OnInit, OnDestroy {
   onExportError(error: any): void {
     console.error('Error en exportación:', error);
     alert('Error al exportar la vista previa');
+  }
+
+  private getTodayLocalDateString(): string {
+    const now = new Date();
+    const tzOffsetMs = now.getTimezoneOffset() * 60000;
+    const local = new Date(now.getTime() - tzOffsetMs);
+    return local.toISOString().split('T')[0];
   }
 }

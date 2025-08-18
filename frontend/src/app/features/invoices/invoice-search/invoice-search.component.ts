@@ -1,6 +1,6 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormBuilder, FormGroup, Validators, ReactiveFormsModule, AbstractControl, ValidationErrors } from '@angular/forms';
+import { FormBuilder, FormGroup, Validators, ReactiveFormsModule, AbstractControl, ValidationErrors, FormsModule } from '@angular/forms';
 import { InvoicesApiService } from '../../../core/http/invoices.api';
 import { Invoice } from '../../../shared/models/invoice';
 import { Subject, debounceTime, distinctUntilChanged, takeUntil, firstValueFrom } from 'rxjs';
@@ -10,7 +10,7 @@ import { ExportButtonComponent } from '../../../shared/components/export-button'
 @Component({
   selector: 'app-invoice-search',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, ExportButtonComponent],
+  imports: [CommonModule, ReactiveFormsModule, FormsModule, ExportButtonComponent],
   template: `
     <div class="card">
       <div class="card-header">
@@ -134,7 +134,7 @@ import { ExportButtonComponent } from '../../../shared/components/export-button'
                   size: 'sm'
                 }"
                 [exportData]="{
-                  invoices: invoices,
+                  invoices: (invoicesFull.length ? invoicesFull : pagedInvoices),
                   title: 'Resultados de Búsqueda de Facturas',
                   filters: {
                     searchType: searchForm.get('searchType')?.value,
@@ -158,8 +158,29 @@ import { ExportButtonComponent } from '../../../shared/components/export-button'
               </button>
             </div>
           </div>
+
+          <!-- Controles de paginación -->
+          <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+            <div class="text-muted">
+              Mostrando {{ pageStartIndex + 1 }}–{{ pageEndIndex }} de {{ totalResults }}
+              • Página {{ currentPage }} de {{ totalPages }}
+            </div>
+            <div class="d-flex align-items-center gap-2">
+              <label class="form-label mb-0 me-2">Tamaño de página</label>
+              <select class="form-select form-select-sm w-auto" [(ngModel)]="pageSize" (ngModelChange)="onPageSizeChange($event)">
+                <option [ngValue]="5">5</option>
+                <option [ngValue]="10">10</option>
+                <option [ngValue]="20">20</option>
+                <option [ngValue]="50">50</option>
+              </select>
+              <div class="btn-group">
+                <button class="btn btn-sm btn-outline-secondary" (click)="prevPage()" [disabled]="currentPage === 1">«</button>
+                <button class="btn btn-sm btn-outline-secondary" (click)="nextPage()" [disabled]="currentPage === totalPages">»</button>
+              </div>
+            </div>
+          </div>
           
-          <div class="table-responsive">
+          <div class="table-responsive table-container">
             <table class="table table-striped table-hover">
               <thead class="table-dark">
                 <tr>
@@ -174,7 +195,7 @@ import { ExportButtonComponent } from '../../../shared/components/export-button'
                 </tr>
               </thead>
               <tbody>
-                <tr *ngFor="let invoice of invoices; trackBy: trackByInvoiceId">
+                <tr *ngFor="let invoice of pagedInvoices; trackBy: trackByInvoiceId">
                   <td>
                     <strong>{{ invoice.invoiceNumber }}</strong>
                   </td>
@@ -216,6 +237,63 @@ import { ExportButtonComponent } from '../../../shared/components/export-button'
                 </tr>
               </tbody>
             </table>
+            <div class="overlay" *ngIf="isPreloadingDetails">
+              <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Cargando detalles...</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal Detalle de Factura -->
+        <div *ngIf="showDetailModal" class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+          <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title">Detalle de Factura {{ selectedInvoice?.invoiceNumber }}</h5>
+                <button type="button" class="btn-close" (click)="closeDetailModal()" aria-label="Cerrar"></button>
+              </div>
+              <div class="modal-body" *ngIf="selectedInvoice">
+                <div class="row mb-3">
+                  <div class="col-sm-6">
+                    <div><strong>Cliente:</strong> {{ selectedInvoice.clientName }}</div>
+                    <div><strong>Fecha:</strong> {{ selectedInvoice.invoiceDate | date:'dd/MM/yyyy' }}</div>
+                  </div>
+                  <div class="col-sm-6 text-sm-end mt-2 mt-sm-0">
+                    <div><strong>Subtotal:</strong> {{ selectedInvoice.subtotal | currency:'COP':'symbol':'1.0-0' }}</div>
+                    <div><strong>IVA (19%):</strong> {{ selectedInvoice.taxAmount | currency:'COP':'symbol':'1.0-0' }}</div>
+                    <div class="h5 mt-2"><strong>Total:</strong> {{ selectedInvoice.total | currency:'COP':'symbol':'1.0-0' }}</div>
+                  </div>
+                </div>
+
+                <div class="table-responsive">
+                  <table class="table table-sm table-striped">
+                    <thead class="table-light">
+                      <tr>
+                        <th>Producto</th>
+                        <th class="text-end">Cantidad</th>
+                        <th class="text-end">Precio Unit.</th>
+                        <th class="text-end">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr *ngFor="let d of selectedInvoice.details">
+                        <td>{{ d.productName }}</td>
+                        <td class="text-end">{{ d.quantity }}</td>
+                        <td class="text-end">{{ d.unitPrice | currency:'COP':'symbol':'1.0-0' }}</td>
+                        <td class="text-end">{{ d.total | currency:'COP':'symbol':'1.0-0' }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" (click)="closeDetailModal()">Cerrar</button>
+                <button type="button" class="btn btn-primary" (click)="exportInvoiceToPdf(selectedInvoice!)">
+                  <i class="fas fa-file-pdf me-1"></i> Exportar PDF
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -271,11 +349,15 @@ import { ExportButtonComponent } from '../../../shared/components/export-button'
     .alert ul {
       padding-left: 1.2rem;
     }
+    .table-container { position: relative; }
+    .overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,.6); z-index: 5; }
+    .modal.show { z-index: 1050; }
   `]
 })
 export class InvoiceSearchComponent implements OnInit, OnDestroy {
   searchForm: FormGroup;
   invoices: Invoice[] = [];
+  invoicesFull: Invoice[] = [];
   isSearching = false;
   isValidatingSearch = false;
   searched = false;
@@ -283,6 +365,14 @@ export class InvoiceSearchComponent implements OnInit, OnDestroy {
   searchValueValid = false;
   searchSuggestions: string[] = [];
   searchStats: any = null;
+  // Paginación
+  currentPage = 1;
+  pageSize = 10;
+  totalResults = 0;
+  isPreloadingDetails = false;
+  // Modal detalle
+  showDetailModal = false;
+  selectedInvoice: Invoice | null = null;
   
   get currentDate(): Date { return new Date(); }
   
@@ -487,12 +577,15 @@ export class InvoiceSearchComponent implements OnInit, OnDestroy {
     this.errorMessage = '';
     this.searchSuggestions = [];
     this.searchStats = null;
+    this.currentPage = 1;
 
     const startTime = performance.now();
 
     try {
       const searchRequest = this.searchForm.value;
       this.invoices = await firstValueFrom(this.invoicesApi.searchInvoices(searchRequest));
+      this.totalResults = this.invoices.length;
+      await this.preloadPageDetails();
       
       const endTime = performance.now();
       this.searchStats = {
@@ -505,6 +598,7 @@ export class InvoiceSearchComponent implements OnInit, OnDestroy {
       console.error('Error al buscar facturas:', error);
       this.errorMessage = error.error?.error || 'Error al realizar la búsqueda';
       this.invoices = [];
+      this.totalResults = 0;
     } finally {
       this.isSearching = false;
     }
@@ -515,8 +609,10 @@ export class InvoiceSearchComponent implements OnInit, OnDestroy {
       this.errorMessage = '';
       const startTime = performance.now();
       
-      const result = await firstValueFrom(this.invoicesApi.getInvoices(1, 10));
+      const result = await firstValueFrom(this.invoicesApi.getInvoices(1, this.pageSize));
       this.invoices = result || [];
+      this.totalResults = this.invoices.length;
+      await this.preloadPageDetails();
       
       const endTime = performance.now();
       this.searchStats = {
@@ -529,7 +625,22 @@ export class InvoiceSearchComponent implements OnInit, OnDestroy {
       console.error('Error al cargar facturas:', error);
       this.errorMessage = error.error?.error || 'Error al cargar las facturas';
       this.invoices = [];
+      this.totalResults = 0;
     }
+  }
+
+  private async populateDetails(list: Invoice[]): Promise<Invoice[]> {
+    const results = await Promise.all(
+      (list || []).map(async inv => {
+        try {
+          const full = await firstValueFrom(this.invoicesApi.getInvoice(inv.id));
+          return full || inv;
+        } catch {
+          return inv;
+        }
+      })
+    );
+    return results;
   }
 
   trackByInvoiceId(index: number, invoice: Invoice): number {
@@ -537,9 +648,25 @@ export class InvoiceSearchComponent implements OnInit, OnDestroy {
   }
 
   viewInvoice(id: number): void {
-    // Implementar navegación a vista de detalles
-    console.log('Ver factura:', id);
-    alert(`Ver detalles de factura ${id}`);
+    this.fetchInvoiceDetails(id);
+  }
+
+  closeDetailModal(): void {
+    this.showDetailModal = false;
+    this.selectedInvoice = null;
+  }
+
+  private async fetchInvoiceDetails(id: number): Promise<void> {
+    try {
+      const full = await firstValueFrom(this.invoicesApi.getInvoice(id));
+      this.selectedInvoice = full || this.invoices.find(i => i.id === id) || null;
+      this.showDetailModal = !!this.selectedInvoice;
+    } catch (err) {
+      console.error('Error cargando detalles de factura', err);
+      // Fallback: mostrar sin detalles si falla
+      this.selectedInvoice = this.invoices.find(i => i.id === id) || null;
+      this.showDetailModal = !!this.selectedInvoice;
+    }
   }
 
   printInvoice(id: number): void {
@@ -572,7 +699,14 @@ export class InvoiceSearchComponent implements OnInit, OnDestroy {
 
   async exportInvoiceToPdf(invoice: Invoice): Promise<void> {
     try {
-      await this.exportService.exportInvoiceToPdf(invoice);
+      let inv = invoice;
+      if (!inv.details || inv.details.length === 0) {
+        try {
+          const full = await firstValueFrom(this.invoicesApi.getInvoice(invoice.id));
+          inv = full || invoice;
+        } catch {}
+      }
+      await this.exportService.exportInvoiceToPdf(inv);
     } catch (error) {
       console.error('Error al exportar factura:', error);
     }
@@ -585,7 +719,7 @@ export class InvoiceSearchComponent implements OnInit, OnDestroy {
 
     try {
       const exportData: ExportData = {
-        invoices: this.invoices,
+        invoices: this.invoicesFull.length ? this.invoicesFull : this.pagedInvoices,
         title: 'Resumen Ejecutivo de Facturación',
         filters: {
           searchType: this.searchForm.get('searchType')?.value,
@@ -615,9 +749,48 @@ export class InvoiceSearchComponent implements OnInit, OnDestroy {
 
   clearResults(): void {
     this.invoices = [];
+    this.invoicesFull = [];
     this.searched = false;
     this.searchStats = null;
     this.searchSuggestions = [];
     this.errorMessage = '';
+    this.totalResults = 0;
+    this.currentPage = 1;
+  }
+
+  get totalPages(): number { return Math.max(1, Math.ceil(this.totalResults / this.pageSize)); }
+  get pageStartIndex(): number { return (this.currentPage - 1) * this.pageSize; }
+  get pageEndIndex(): number { return Math.min(this.pageStartIndex + this.pageSize, this.totalResults); }
+  get pagedInvoices(): Invoice[] { return this.invoices.slice(this.pageStartIndex, this.pageEndIndex); }
+
+  async onPageSizeChange(value: any): Promise<void> {
+    // Soporta binding desde (ngModelChange) que entrega el valor o el evento
+    const newSize = typeof value === 'number' ? value : Number((value?.target?.value) ?? this.pageSize);
+    this.pageSize = isNaN(newSize) ? this.pageSize : newSize;
+    this.currentPage = 1;
+    await this.preloadPageDetails();
+  }
+
+  async nextPage(): Promise<void> {
+    if (this.currentPage < this.totalPages) {
+      this.currentPage++;
+      await this.preloadPageDetails();
+    }
+  }
+
+  async prevPage(): Promise<void> {
+    if (this.currentPage > 1) {
+      this.currentPage--;
+      await this.preloadPageDetails();
+    }
+  }
+
+  private async preloadPageDetails(): Promise<void> {
+    this.isPreloadingDetails = true;
+    try {
+      this.invoicesFull = await this.populateDetails(this.pagedInvoices);
+    } finally {
+      this.isPreloadingDetails = false;
+    }
   }
 }

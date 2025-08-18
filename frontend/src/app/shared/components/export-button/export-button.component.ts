@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, OnInit } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnInit, HostListener, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ExportService, ExportOptions, ExportData } from '../../../core/services/export.service';
@@ -41,15 +41,15 @@ export interface ExportButtonConfig {
         {{ config.loading ? 'Exportando...' : (config.label || 'Exportar') }}
       </button>
 
-      <!-- Selector de formato con opciones -->
-      <div *ngIf="config.showFormatSelector" class="dropdown">
+      <!-- Selector de formato controlado por Angular (sin dependencia JS de Bootstrap) -->
+      <div *ngIf="config.showFormatSelector" class="dropdown" #dropdownRoot>
         <button 
           class="btn dropdown-toggle"
           [class]="getButtonClasses()"
           [disabled]="config.disabled || config.loading"
           type="button"
-          data-bs-toggle="dropdown"
-          aria-expanded="false">
+          (click)="toggleDropdown()"
+          [attr.aria-expanded]="dropdownOpen">
           
           <span *ngIf="config.loading" class="spinner-border spinner-border-sm me-2" role="status">
             <span class="visually-hidden">Exportando...</span>
@@ -60,12 +60,12 @@ export interface ExportButtonConfig {
           {{ config.loading ? 'Exportando...' : (config.label || 'Exportar') }}
         </button>
         
-        <ul class="dropdown-menu">
+        <ul class="dropdown-menu" [class.show]="dropdownOpen" [style.display]="dropdownOpen ? 'block' : 'none'">
           <li *ngFor="let format of availableFormats">
             <button 
               class="dropdown-item"
               type="button"
-              (click)="exportWithFormat(format)"
+              (click)="onSelectFormat(format)"
               [disabled]="config.loading">
               
               <i [class]="getFormatIcon(format)" class="me-2"></i>
@@ -78,7 +78,7 @@ export interface ExportButtonConfig {
             <button 
               class="dropdown-item"
               type="button"
-              (click)="showExportOptions()"
+              (click)="onShowOptions()"
               [disabled]="config.loading">
               
               <i class="fas fa-cog me-2"></i>
@@ -187,6 +187,7 @@ export interface ExportButtonConfig {
   styles: [`
     .export-button-container {
       display: inline-block;
+      position: relative;
     }
     
     .export-button-container.disabled {
@@ -195,7 +196,7 @@ export interface ExportButtonConfig {
     }
     
     .dropdown-menu {
-      min-width: 200px;
+      min-width: 220px;
     }
     
     .dropdown-item {
@@ -238,6 +239,9 @@ export interface ExportButtonConfig {
   `]
 })
 export class ExportButtonComponent implements OnInit {
+  dropdownOpen = false;
+  // Reference assigned via template (#dropdownRoot) using ViewChild
+  @ViewChild('dropdownRoot', { static: false }) dropdownRoot?: ElementRef<HTMLDivElement>;
   @Input() config: ExportButtonConfig = {};
   @Input() exportData: ExportData | null = null;
   @Output() exportStarted = new EventEmitter<void>();
@@ -291,6 +295,30 @@ export class ExportButtonComponent implements OnInit {
         this.config.formats!.includes(f as any)
       );
     }
+  }
+
+  toggleDropdown(): void {
+    if (this.config.disabled || this.config.loading) return;
+    this.dropdownOpen = !this.dropdownOpen;
+  }
+
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: MouseEvent): void {
+    if (!this.dropdownOpen) return;
+    const target = event.target as Node;
+    if (this.dropdownRoot && !this.dropdownRoot.nativeElement.contains(target)) {
+      this.dropdownOpen = false;
+    }
+  }
+
+  onSelectFormat(format: string): void {
+    this.dropdownOpen = false;
+    this.exportWithFormat(format);
+  }
+
+  onShowOptions(): void {
+    this.dropdownOpen = false;
+    this.showExportOptions();
   }
 
   /**

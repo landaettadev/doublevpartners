@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { map } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { Client, Product } from '../../shared/models/catalog';
 
@@ -21,7 +22,18 @@ export class CatalogApiService {
   }
 
   getProducts(): Observable<Product[]> {
-    return this.http.get<Product[]>(`${this.baseUrl}/products`);
+    return this.http.get<any[]>(`${this.baseUrl}/products`).pipe(
+      map(items => (items || []).map(p => ({
+        id: p.id,
+        name: p.name,
+        description: p.description,
+        price: p.price,
+        imageUrl: p.image?.url || p.image?.fileName || p.imageUrl || '',
+        isActive: p.isActive,
+        createdAt: p.createdAt,
+        updatedAt: p.updatedAt
+      }) as Product))
+    );
   }
 
   getProduct(id: number): Observable<Product> {
